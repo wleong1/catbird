@@ -2,6 +2,7 @@ from abc import ABC
 from collections.abc import Iterable
 from .param import MooseParam
 from .string import MooseString
+import re
 
 class MooseBase(ABC,MooseString):
     """
@@ -105,11 +106,24 @@ class MooseBase(ABC,MooseString):
 
         type_now=type(attr_val)
         attr_val_str=""
+
+        # Formatting of lists, strings
         if issubclass(type_now, Iterable) and type_now != str :
+            # Convert lists to whitespace separated string
             str_list = [ str(v)+" " for v in attr_val ]
             attr_val_str="".join(str_list)
             attr_val_str=attr_val_str.rstrip()
-            attr_val_str="'"+attr_val_str+"'"
+            # Enclose multiple entries in single quotes
+            if len(str_list) > 1:
+                attr_val_str="'"+attr_val_str+"'"
+        elif type_now == str:
+            # Look for special characters - needs single quotes
+            regex = re.compile('[-+/*()\s]')
+            match = regex.search(attr_val)
+            if match:
+                attr_val_str="'"+attr_val+"'"
+            else:
+                attr_val_str=attr_val
         else:
             attr_val_str=str(attr_val)
 

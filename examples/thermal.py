@@ -53,7 +53,7 @@ def main():
     model.add_bc("t_right",
                  bc_type="FunctionDirichletBC",
                  variable=var_name,
-                 function = "'300+5*t'",
+                 function = "300+5*t",
                  boundary = 'right')
 
     # Add materials
