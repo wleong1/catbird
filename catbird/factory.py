@@ -137,6 +137,8 @@ class Factory():
                 # Skip mix-ins with no parameters
                 if not hasattr(base,"params_name"):
                     continue
+                if not hasattr(self,base.params_name):
+                    continue
                 try:
                     dict_now=getattr(self,base.params_name)
                     param=dict_now[attr_name]

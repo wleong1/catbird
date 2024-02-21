@@ -78,6 +78,8 @@ class MooseBase(ABC,MooseString):
 
         Raise KeyError if not found.
         """
+        if not hasattr(self,self.params_name):
+            raise KeyError
         dict_now=getattr(self,self.params_name)
         return dict_now[attr_name]
 
