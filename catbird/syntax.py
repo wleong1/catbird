@@ -436,6 +436,9 @@ def parse_block(json_obj,syntax_path,class_name):
     relation=_relation_shorthands[syntax_path.parent_relation]
     class_type=_child_type_map[relation]
 
+    if class_type == None:
+        raise TypeError
+
     # Generate class documentation
     doc_now=class_type.moose_doc(moose_param_list)
 

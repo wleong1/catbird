@@ -79,7 +79,12 @@ class Factory():
                 continue
 
             if  block.is_leaf:
-                self._load_leaf_syntax(block_name, block, json_obj)
+                try:
+                    self._load_leaf_syntax(block_name, block, json_obj)
+                except TypeError:
+                    # A handful of syntax types we we can't yet support
+                    print("Warning: Skipping unsupported syntax ", block_name)
+                    continue
             else:
                 self._load_root_syntax(block_name, block)
 
