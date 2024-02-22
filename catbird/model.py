@@ -138,6 +138,11 @@ class MooseModel():
         collection_kwargs["collection_type"]=output_type
         self.add_to_collection("Outputs","Output",output_name,**collection_kwargs)
 
+    def add_function(self,function_name,function_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=function_type
+        self.add_to_collection("Functions","Function",function_name,**collection_kwargs)
+
     def add_mesh_generator(self,mesh_generator_name,mesh_generator_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=mesh_generator_type
