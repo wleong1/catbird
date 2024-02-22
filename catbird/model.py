@@ -143,6 +143,11 @@ class MooseModel():
         collection_kwargs["collection_type"]=function_type
         self.add_to_collection("Functions","Function",function_name,**collection_kwargs)
 
+    def add_postprocessor(self,postprocessor_name,postprocessor_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=postprocessor_type
+        self.add_to_collection("Postprocessors","Postprocessor",postprocessor_name,**collection_kwargs)
+
     def add_preconditioner(self,preconditioner_name,preconditioner_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=preconditioner_type

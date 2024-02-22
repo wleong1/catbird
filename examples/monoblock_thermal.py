@@ -6,7 +6,7 @@ import math
 
 # This is how we enable syntax
 # Only enable what you need, or it runs slowly!
-class MonoblockFactory(Factory): 
+class MonoblockFactory(Factory):
     def set_defaults(self):
         executioner_enable_dict={
             "obj_type": ["Steady","Transient"]
@@ -18,21 +18,24 @@ class MonoblockFactory(Factory):
         self.enable_syntax("Functions")
         self.enable_syntax("Materials")
         self.enable_syntax("BCs")
-        # self.enable_syntax("VectorPostprocessors")
-        # self.enable_syntax("Outputs")
+        self.enable_syntax("Preconditioning")
+        self.enable_syntax("Postprocessors")
+        self.enable_syntax("Outputs")
 
 
 # This class represents the boilerplate input deck
-class MonoblockModel(MooseModel): 
+class MonoblockModel(MooseModel):
     def load_default_syntax(self):
-        self.add_syntax("Executioner", obj_type="Steady")
         self.add_syntax("Mesh", action="SetupMeshAction")
         self.add_syntax("Variables")
         self.add_syntax("Kernels")
-        self.add_syntax("Functions")
+        #self.add_syntax("Functions")
         self.add_syntax("Materials")
         self.add_syntax("BCs")
-        #self.add_syntax("Outputs", action="CommonOutputAction")
+        self.add_syntax("Preconditioning")
+        self.add_syntax("Executioner", obj_type="Steady")
+        self.add_syntax("Postprocessors")
+        self.add_syntax("Outputs", action="CommonOutputAction")
 
 # Just a struct to store geometric parameters
 class MonoblockGeometry():
@@ -42,7 +45,7 @@ class MonoblockGeometry():
         self.intLayerThick=1e-3   # m
         self.monoBThick=3e-3      # m
         self.monoBArmHeight=8e-3  # m
-        self.monoBDepth=12e-3     # m        
+        self.monoBDepth=12e-3     # m
         self.pipeExtDiam=self.pipeIntDiam + 2*self.pipeThick
         self.intLayerIntDiam=self.pipeExtDiam
         self.intLayerExtDiam=self.intLayerIntDiam + 2*self.intLayerThick
@@ -52,7 +55,7 @@ class MonoblockGeometry():
         # Mesh Sizing
         self.meshRefFact=1
         self.meshDens=1e3 # divisions per metre (nominal)
-               
+
         # Number of divisions along the top section of the monoblock armour.
         self.monoBArmDivs=int(self.monoBArmHeight * self.meshDens * self.meshRefFact)
 
@@ -72,7 +75,7 @@ class MonoblockGeometry():
         tol=self.monoBElemSize / 10
         ctol=self.pipeIntCirc / (8 * 4 * self.pipeCircSectDivs)
 
-        
+
 def main():
     # Get path to MOOSE
     moose_path=os.environ['MOOSE_DIR']
@@ -85,7 +88,7 @@ def main():
 
     # Create a factory of available objects from our MOOSE executable
     factory=MonoblockFactory(app_exe)
-    
+
     config_name="monoblock_config.json"
     factory.write_config(config_name)
 
@@ -96,6 +99,9 @@ def main():
     model.executioner.solve_type='PJFNK'
     model.executioner.petsc_options_iname='-pc_type -pc_hypre_type'
     model.executioner.petsc_options_value='hypre boomeramg'
+
+    # Add a preconditioner
+    model.add_preconditioner("smp","SMP",full=True)
 
     # Set mesh attributes
     model.second_order=False
@@ -152,20 +158,20 @@ def main():
     #                            input="delete_void",
     #                            old_block='4 0',
     #                            new_block='armour armour')
-    
+
     #   model.add_mesh_generator("merge_boundary_names",
     #                            "RenameBoundaryGenerator",
     #                            input=merge_block_names,
     #                            old_boundary='armour_top armour_left 10002 15002 armour_right 10004 15004 10003 15003'
     #                            new_boundary='top left left left right right right bottom bottom'
-    
+
     #   model.add_mesh_generator("extrude",
     #                            "AdvancedExtruderGenerator",
     #                            input="merge_boundary_names",
     #                            direction='0 0 1',
     #                            heights=geom.monoBDepth,
     #                            num_layers=geom.extrudeDivs)
-    
+
     #  model.add_mesh_generator("name_node_centre_x_bottom_y_back_z",
     #                           "BoundingBoxNodeSetGenerator",
     #                           input="extrude",
@@ -176,7 +182,7 @@ def main():
     #                                      (geom.monoBWidth/-2)+geom.ctol,
     #                                      geom.tol],
     #                           new_boundary="centre_x_bottom_y_back_z")
-    
+
     #  model.add_mesh_generator("name_node_centre_x_bottom_y_front_z",
     #                           "BoundingBoxNodeSetGenerator",
     #                           input="name_node_centre_x_bottom_y_back_z",
@@ -187,7 +193,7 @@ def main():
     #                                      (geom.monoBWidth/-2)+geom.ctol,
     #                                      geom.monoBDepth+geom.tol],
     #                           new_boundary="centre_x_bottom_y_front_z")
-    
+
     #   model.add_mesh_generator("name_node_left_x_bottom_y_centre_z",
     #                            "BoundingBoxNodeSetGenerator",
     #                            input="name_node_centre_x_bottom_y_front_z",
@@ -199,7 +205,7 @@ def main():
     #                                       (geom.monoBDepth/2)+geom.tol],
     #                            new_boundary="left_x_bottom_y_centre_z"
     #                            )
-    
+
     # model.add_mesh_generator("name_node_right_x_bottom_y_centre_z",
     #                          "BoundingBoxNodeSetGenerator",
     #                          input="name_node_left_x_bottom_y_centre_z",
@@ -219,70 +225,71 @@ def main():
                        order="FIRST",
                        initial_condition=coolantTemp)
 
-    # Add kernels
+    # # Add kernels
     model.add_kernel("heat_conduction",kernel_type="HeatConduction", variable=var_name)
 
-    # Add functions
-    model.add_function("cucrzr_thermal_expansion",function_type="PiecewiseLinear",
-                       xy_data=[ 20, 1.67e-05,
-                                 50, 1.7e-05,
-                                 100, 1.73e-05,
-                                 150, 1.75e-05,
-                                 200, 1.77e-05,
-                                 250, 1.78e-05,
-                                 300, 1.8e-05,
-                                 350, 1.8e-05,
-                                 400, 1.81e-05,
-                                 450, 1.82e-05,
-                                 500, 1.84e-05,
-                                 550, 1.85e-05,
-                                 600, 1.86e-05 ] )
-    
-    model.add_function("copper_thermal_expansion",function_type="PiecewiseLinear",
-                       xy_data=[20, 1.67e-05,
-                                50, 1.7e-05,
-                                100, 1.72e-05,
-                                150, 1.75e-05,
-                                200, 1.77e-05,
-                                250, 1.78e-05,
-                                300, 1.8e-05,
-                                350, 1.81e-05,
-                                400, 1.82e-05,
-                                450, 1.84e-05,
-                                500, 1.85e-05,
-                                550, 1.87e-05,
-                                600, 1.88e-05,
-                                650, 1.9e-05,
-                                700, 1.91e-05,
-                                750, 1.93e-05,
-                                800, 1.96e-05,
-                                850, 1.98e-05,
-                                900, 2.01e-05])
+    # Not needed for thermal problem
+    # # Add functions
+    # model.add_function("cucrzr_thermal_expansion",function_type="PiecewiseLinear",
+    #                    xy_data=[ 20, 1.67e-05,
+    #                              50, 1.7e-05,
+    #                              100, 1.73e-05,
+    #                              150, 1.75e-05,
+    #                              200, 1.77e-05,
+    #                              250, 1.78e-05,
+    #                              300, 1.8e-05,
+    #                              350, 1.8e-05,
+    #                              400, 1.81e-05,
+    #                              450, 1.82e-05,
+    #                              500, 1.84e-05,
+    #                              550, 1.85e-05,
+    #                              600, 1.86e-05 ] )
 
-    model.add_function("tungsten_thermal_expansion",function_type="PiecewiseLinear",
-                       xy_data=[20,   4.5e-06,
-                                100,  4.5e-06,
-                                200,  4.53e-06,
-                                300,  4.58e-06,
-                                400,  4.63e-06,
-                                500,  4.68e-06,
-                                600,  4.72e-06,
-                                700,  4.76e-06,
-                                800,  4.81e-06,
-                                900,  4.85e-06,
-                                1000, 4.89e-06,
-                                1200, 4.98e-06,
-                                1400, 5.08e-06,
-                                1600, 5.18e-06,
-                                1800, 5.3e-06,
-                                2000, 5.43e-06,
-                                2200, 5.57e-06,
-                                2400, 5.74e-06,
-                                2600, 5.93e-06,
-                                2800, 6.15e-06,
-                                3000, 6.4e-06,
-                                3200, 6.67e-06])
-    
+    # model.add_function("copper_thermal_expansion",function_type="PiecewiseLinear",
+    #                    xy_data=[20, 1.67e-05,
+    #                             50, 1.7e-05,
+    #                             100, 1.72e-05,
+    #                             150, 1.75e-05,
+    #                             200, 1.77e-05,
+    #                             250, 1.78e-05,
+    #                             300, 1.8e-05,
+    #                             350, 1.81e-05,
+    #                             400, 1.82e-05,
+    #                             450, 1.84e-05,
+    #                             500, 1.85e-05,
+    #                             550, 1.87e-05,
+    #                             600, 1.88e-05,
+    #                             650, 1.9e-05,
+    #                             700, 1.91e-05,
+    #                             750, 1.93e-05,
+    #                             800, 1.96e-05,
+    #                             850, 1.98e-05,
+    #                             900, 2.01e-05])
+
+    # model.add_function("tungsten_thermal_expansion",function_type="PiecewiseLinear",
+    #                    xy_data=[20,   4.5e-06,
+    #                             100,  4.5e-06,
+    #                             200,  4.53e-06,
+    #                             300,  4.58e-06,
+    #                             400,  4.63e-06,
+    #                             500,  4.68e-06,
+    #                             600,  4.72e-06,
+    #                             700,  4.76e-06,
+    #                             800,  4.81e-06,
+    #                             900,  4.85e-06,
+    #                             1000, 4.89e-06,
+    #                             1200, 4.98e-06,
+    #                             1400, 5.08e-06,
+    #                             1600, 5.18e-06,
+    #                             1800, 5.3e-06,
+    #                             2000, 5.43e-06,
+    #                             2200, 5.57e-06,
+    #                             2400, 5.74e-06,
+    #                             2600, 5.93e-06,
+    #                             2800, 6.15e-06,
+    #                             3000, 6.4e-06,
+    #                             3200, 6.67e-06])
+
     # Add materials
     # Thermal conductivities
     model.add_material("cucrzr_thermal_conductivity",
@@ -450,7 +457,7 @@ def main():
                        variable=var_name,
                        property='specific_heat',
                        block='pipe')
-                       
+
     model.add_material("copper_specific_heat",
                        "PiecewiseLinearInterpolationMaterial",
                        xy_data=[20, 388,
@@ -477,7 +484,7 @@ def main():
                        variable=var_name,
                        property='specific_heat',
                        block='interlayer')
-                       
+
     model.add_material("tungsten_specific_heat",
                        "PiecewiseLinearInterpolationMaterial",
                        xy_data=[20, 129,
@@ -519,9 +526,6 @@ def main():
                        property='heat_transfer_coefficient',
                        boundary='internal_boundary',)
 
-    #stressFreeTemp=20   # degC
-    #
-    
     # Add boundary conditions
     surfHeatFlux=10e6   # W/m^2
     model.add_bc("heat_flux_in",
@@ -529,7 +533,7 @@ def main():
                  variable=var_name,
                  boundary='top',
                  value=surfHeatFlux)
-    
+
     model.add_bc("heat_flux_out",
                  "ConvectiveHeatFluxBC",
                  variable=var_name,
@@ -537,37 +541,16 @@ def main():
                  T_infinity=coolantTemp,
                  heat_transfer_coefficient='heat_transfer_coefficient')
 
-    # model.outputs.exodus=True
-    # model.add_output("csv",output_type="CSV",
-    #                  file_base='thermal_out',
-    #                  execute_on='final')    
-        
-    # # Add some input syntax that wasn't in the vanilla boilerplate model
-    # model.add_syntax("VectorPostprocessors")
-    # model.add_to_collection("VectorPostprocessors",
-    #                         "VectorPostprocessor",
-    #                         "t_sampler",
-    #                         collection_type="LineValueSampler",
-    #                         variable=var_name,
-    #                         start_point='0 0.5 0',
-    #                         end_point='2 0.5 0',
-    #                         num_points=20,                            
-    #                         sort_by='x')
-    
+    # Add Exodus output
+    model.outputs.exodus=True
+
+    # Add postprocessor
+    model.add_postprocessor("max_temp","ElementExtremeValue",variable=var_name)
+
     # Write out our input file
     input_name="monoblock_thermal.i"
     model.write(input_name)
 
-    # # Run
-    # args=[app_exe,'-i',input_name]
-    # moose_process=subprocess.Popen(args)
-    # stream_data=moose_process.communicate()[0]
-    # retcode=moose_process.returncode 
-
-    # # Return moose return code
-    # sys.exit(retcode)
 
 if __name__ == "__main__":
     main()
-
-    
