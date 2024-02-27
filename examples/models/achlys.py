@@ -7,15 +7,18 @@ class AchlysFactory(Factory):
     def set_defaults(self):
         # Dictionaries limit enabled syntax to exactly what is specified
         executioner_enable_dict={
-            "obj_type": ["Transient"],
-            "system" : ["TimeSteppers"]
+            "obj_type": ["Transient","IterationAdaptiveDT"],
+            "system" : ["TimeStepper"],
+            #"collection_type": ["IterationAdaptiveDT"]
         } 
         mesh_enable_dict={
             "obj_type": ["FileMesh"]
         }
-        self.enable_syntax("Executioner")
+        #self.enable_syntax("Executioner")
+        #self.enable_syntax("Executioner/Time")
+        
         self.enable_syntax("Executioner", executioner_enable_dict)
-        #self.enable_syntax("Mesh", mesh_enable_dict)
+        self.enable_syntax("Mesh", mesh_enable_dict)
         # self.enable_syntax("Variables")
         # self.enable_syntax("Kernels")
         # self.enable_syntax("AuxVariables")
@@ -36,7 +39,7 @@ class AchlysModel(MooseModel):
         # self.add_syntax("Kernels")
         # self.add_syntax("BCs")
         self.add_syntax("Executioner", obj_type="Transient")
-        # self.add_syntax("Executioner.TimeSteppers")
+        self.add_syntax("Executioner.TimeStepper", obj_type="IterationAdaptiveDT")
         # self.add_syntax("Postprocessors")
         # self.add_syntax("Outputs", action="CommonOutputAction")
 
@@ -63,6 +66,9 @@ class AchlysModel(MooseModel):
         self.executioner.end_time=1e5
         self.executioner.dtmin=1e-2
 
+        #print(type(self.executioner.timesteppers))
+        #self.add_to_collection("Executioner.TimeSteppers","TimeStepper",collection_type="IterationAdaptiveDT")
+        
         # # timestepping options
         # [TimeStepper]
         #   type = IterationAdaptiveDT
