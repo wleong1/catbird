@@ -8,7 +8,7 @@ def main():
     moose_path=os.environ['MOOSE_DIR']
 
     # Path to executable and inputs
-    module_name="heat_conduction"
+    module_name="heat_transfer"
     app_name=module_name+"-opt"
     app_path=os.path.join(moose_path,"modules",module_name)
     app_exe=os.path.join(app_path,app_name)
