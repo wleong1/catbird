@@ -54,10 +54,10 @@ class MonoblockGeometry():
         # Number of divisions along monoblock depth (i.e. z-dimension).
         self.extrudeDivs=max(2 * int(self.monoBDepth * self.meshDens * self.meshRefFact / 2), 4)
         self.monoBElemSize=self.monoBDepth / self.extrudeDivs
-        tol=self.monoBElemSize / 10
-        ctol=self.pipeIntCirc / (8 * 4 * self.pipeCircSectDivs)
+        self.tol=self.monoBElemSize / 10
+        self.ctol=self.pipeIntCirc / (8 * 4 * self.pipeCircSectDivs)
 
-        
+
 # This class represents the boilerplate input deck
 class MonoblockModel(MooseModel):
     def load_default_syntax(self):
@@ -74,7 +74,7 @@ class MonoblockModel(MooseModel):
 
     def __init__(self,factory_in):
         super().__init__(factory_in)
-        assert isinstance(factory_in,MonoblockFactory)       
+        assert isinstance(factory_in,MonoblockFactory)
         self._concretise_model()
 
     def _concretise_model(self):
@@ -85,120 +85,121 @@ class MonoblockModel(MooseModel):
 
         # Add a preconditioner
         self.add_preconditioner("smp","SMP",full=True)
-        
+
         # Set mesh attributes
         self.second_order=False
-        
+
         # Add mesh generators (using kwarg syntax)
         geom=MonoblockGeometry()
-        # self.add_mesh_generator("mesh_monoblock",
-        #                          "PolygonConcentricCircleMeshGenerator",
-        #                          num_sides=4,
-        #                          polygon_size=geom.monoBWidth / 2,
-        #                          polygon_size_style='apothem',
-        #                          ring_radii=[ geom.pipeIntDiam / 2,
-        #                                       geom.pipeExtDiam / 2,
-        #                                       geom.intLayerExtDiam / 2 ],
-        #                          num_sectors_per_side=[geom.pipeCircSectDivs,
-        #                                                geom.pipeCircSectDivs,
-        #                                                geom.pipeCircSectDivs,
-        #                                                geom.pipeCircSectDivs],
-        #                          ring_intervals=[1, geom.pipeRadDivs, geom.intLayerRadDivs],
-        #                          background_intervals=geom.monoBRadDivs,
-        #                          preserve_volumes='on',
-        #                          flat_side_up=True,
-        #                          ring_block_names='void pipe interlayer',
-        #                          background_block_names='monoblock',
-        #                          interface_boundary_id_shift=1000,
-        #                          external_boundary_name='monoblock_boundary',
-        #                          generate_side_specific_boundaries=True)
+        self.add_mesh_generator("mesh_monoblock",
+                                "PolygonConcentricCircleMeshGenerator",
+                                num_sides=4,
+                                polygon_size=geom.monoBWidth / 2,
+                                polygon_size_style='apothem',
+                                ring_radii=[ geom.pipeIntDiam / 2,
+                                             geom.pipeExtDiam / 2,
+                                             geom.intLayerExtDiam / 2 ],
+                                num_sectors_per_side=[geom.pipeCircSectDivs,
+                                                      geom.pipeCircSectDivs,
+                                                      geom.pipeCircSectDivs,
+                                                      geom.pipeCircSectDivs],
+                                ring_intervals=[1, geom.pipeRadDivs, geom.intLayerRadDivs],
+                                background_intervals=geom.monoBRadDivs,
+                                preserve_volumes='on',
+                                flat_side_up=True,
+                                ring_block_names='void pipe interlayer',
+                                background_block_names='monoblock',
+                                interface_boundary_id_shift=1000,
+                                external_boundary_name='monoblock_boundary',
+                                generate_side_specific_boundaries=True)
 
         self.add_mesh_generator("mesh_armour",
-                                 "GeneratedMeshGenerator",
-                                 dim=2,
-                                 xmin=(geom.monoBWidth/-2),
-                                 xmax=(geom.monoBWidth/2),
-                                 ymin=(geom.monoBWidth/2),
-                                 ymax=(geom.monoBWidth/2+geom.monoBArmHeight),
-                                 nx=(geom.pipeCircSectDivs),
-                                 ny=(geom.monoBArmDivs),
-                                 boundary_name_prefix='armour')
+                                "GeneratedMeshGenerator",
+                                dim=2,
+                                xmin=(geom.monoBWidth/-2),
+                                xmax=(geom.monoBWidth/2),
+                                ymin=(geom.monoBWidth/2),
+                                ymax=(geom.monoBWidth/2+geom.monoBArmHeight),
+                                nx=(geom.pipeCircSectDivs),
+                                ny=(geom.monoBArmDivs),
+                                boundary_name_prefix='armour')
 
-        #   self.add_mesh_generator("combine_meshes",
-        #                            "StitchedMeshGenerator",
-        #                            inputs='mesh_monoblock mesh_armour',
-        #                            stitch_boundaries_pairs='monoblock_boundary armour_bottom',
-        #                            clear_stitched_boundary_ids=true)
+        self.add_mesh_generator("combine_meshes",
+                                "StitchedMeshGenerator",
+                                inputs='mesh_monoblock mesh_armour',
+                                stitch_boundaries_pairs='monoblock_boundary armour_bottom',
+                                clear_stitched_boundary_ids=True)
 
-        #   self.add_mesh_generator("delete_void",
-        #                            "BlockDeletionGenerator",
-        #                            input="combine_meshes",
-        #                            block="void",
-        #                            new_boundary="internal_boundary")
+        self.add_mesh_generator("delete_void",
+                                "BlockDeletionGenerator",
+                                input="combine_meshes",
+                                block="void",
+                                new_boundary="internal_boundary")
 
-        #   self.add_mesh_generator("merge_block_names",
-        #                            "RenameBlockGenerator",
-        #                            input="delete_void",
-        #                            old_block='4 0',
-        #                            new_block='armour armour')
-        
-        #   self.add_mesh_generator("merge_boundary_names",
-        #                            "RenameBoundaryGenerator",
-        #                            input=merge_block_names,
-        #                            old_boundary='armour_top armour_left 10002 15002 armour_right 10004 15004 10003 15003'
-        #                            new_boundary='top left left left right right right bottom bottom'
+        self.add_mesh_generator("merge_block_names",
+                                "RenameBlockGenerator",
+                                input="delete_void",
+                                old_block='4 0',
+                                new_block='armour armour')
 
-        #   self.add_mesh_generator("extrude",
-        #                            "AdvancedExtruderGenerator",
-        #                            input="merge_boundary_names",
-        #                            direction='0 0 1',
-        #                            heights=geom.monoBDepth,
-        #                            num_layers=geom.extrudeDivs)
+        self.add_mesh_generator("merge_boundary_names",
+                                "RenameBoundaryGenerator",
+                                input="merge_block_names",
+                                old_boundary='armour_top armour_left 10002 15002 armour_right 10004 15004 10003 15003',
+                                new_boundary='top left left left right right right bottom bottom')
 
-        #  self.add_mesh_generator("name_node_centre_x_bottom_y_back_z",
-        #                           "BoundingBoxNodeSetGenerator",
-        #                           input="extrude",
-        #                           bottom_left=[-geom.ctol,
-        #                                        (geom.monoBWidth/-2)-geom.ctol,
-        #                                       -geom.tol],
-        #                           top_right=[geom.ctol,
-        #                                      (geom.monoBWidth/-2)+geom.ctol,
-        #                                      geom.tol],
-        #                           new_boundary="centre_x_bottom_y_back_z")
+        self.add_mesh_generator("extrude",
+                                "AdvancedExtruderGenerator",
+                                input="merge_boundary_names",
+                                direction='0 0 1',
+                                heights=geom.monoBDepth,
+                                num_layers=geom.extrudeDivs)
 
-        #  self.add_mesh_generator("name_node_centre_x_bottom_y_front_z",
-        #                           "BoundingBoxNodeSetGenerator",
-        #                           input="name_node_centre_x_bottom_y_back_z",
-        #                           bottom_left=[-geom.ctol,
-        #                                        (geom.monoBWidth/-2)-geom.ctol,
-        #                                        geom.monoBDepth-tol],
-        #                           top_right=[geom.ctol,
-        #                                      (geom.monoBWidth/-2)+geom.ctol,
-        #                                      geom.monoBDepth+geom.tol],
-        #                           new_boundary="centre_x_bottom_y_front_z")
+        self.add_mesh_generator("name_node_centre_x_bottom_y_back_z",
+                                "BoundingBoxNodeSetGenerator",
+                                input="extrude",
+                                bottom_left=[-geom.ctol,
+                                             (geom.monoBWidth/-2)-geom.ctol,
+                                             -geom.tol],
+                                top_right=[geom.ctol,
+                                           (geom.monoBWidth/-2)+geom.ctol,
+                                           geom.tol],
+                                new_boundary="centre_x_bottom_y_back_z")
 
-        #   self.add_mesh_generator("name_node_left_x_bottom_y_centre_z",
-        #                            "BoundingBoxNodeSetGenerator",
-        #                            input="name_node_centre_x_bottom_y_front_z",
-        #                            bottom_left=[(geom.monoBWidth/-2)-geom.ctol,
-        #                                          (geom.monoBWidth/-2)-geom.ctol,
-        #                                          geom.monoBDepth/2)-geom.tol]
-        #                            top_right=[(geom.monoBWidth/-2)+geom.ctol,
-        #                                       (geom.monoBWidth/-2)+geom.ctol,
-        #                                       (geom.monoBDepth/2)+geom.tol],
-        #                            new_boundary="left_x_bottom_y_centre_z"
-        #                            )
+        self.add_mesh_generator("name_node_centre_x_bottom_y_front_z",
+                                "BoundingBoxNodeSetGenerator",
+                                input="name_node_centre_x_bottom_y_back_z",
+                                bottom_left=[-geom.ctol,
+                                             (geom.monoBWidth/-2)-geom.ctol,
+                                             geom.monoBDepth-geom.tol],
+                                top_right=[geom.ctol,
+                                           (geom.monoBWidth/-2)+geom.ctol,
+                                           geom.monoBDepth+geom.tol],
+                            new_boundary="centre_x_bottom_y_front_z")
 
-        # self.add_mesh_generator("name_node_right_x_bottom_y_centre_z",
-        #                          "BoundingBoxNodeSetGenerator",
-        #                          input="name_node_left_x_bottom_y_centre_z",
-        #                          bottom_left=[(geom.monoBWidth/2)-geom.ctol,
-        #                                       (geom.monoBWidth/-2)-geom.ctol,
-        #                                       (geom.monoBDepth/2)-geom.tol],
-        #                          top_right=[(geom.monoBWidth/2)+geom.ctol,
-        #                                     (geom.monoBWidth/-2)+geom.ctol,
-        #                                     (geom.monoBDepth/2)+geom.tol],
-        #                          new_boundary="right_x_bottom_y_centre_z")
+        self.add_mesh_generator("name_node_left_x_bottom_y_centre_z",
+                                "BoundingBoxNodeSetGenerator",
+                                input="name_node_centre_x_bottom_y_front_z",
+                                bottom_left=[(geom.monoBWidth/-2)-geom.ctol,
+                                             (geom.monoBWidth/-2)-geom.ctol,
+                                             (geom.monoBDepth/2)-geom.tol],
+                                top_right=[(geom.monoBWidth/-2)+geom.ctol,
+                                           (geom.monoBWidth/-2)+geom.ctol,
+                                           (geom.monoBDepth/2)+geom.tol],
+                                new_boundary="left_x_bottom_y_centre_z"
+                            )
+
+        self.add_mesh_generator("name_node_right_x_bottom_y_centre_z",
+                                "BoundingBoxNodeSetGenerator",
+                                input="name_node_left_x_bottom_y_centre_z",
+                                bottom_left=[(geom.monoBWidth/2)-geom.ctol,
+                                             (geom.monoBWidth/-2)-geom.ctol,
+                                             (geom.monoBDepth/2)-geom.tol],
+                                top_right=[(geom.monoBWidth/2)+geom.ctol,
+                                           (geom.monoBWidth/-2)+geom.ctol,
+                                           (geom.monoBDepth/2)+geom.tol],
+                                new_boundary="right_x_bottom_y_centre_z"
+                            )
 
         # Add variables
         var_name="temperature"
@@ -291,7 +292,7 @@ class MonoblockModel(MooseModel):
                            variable=var_name,
                            property='thermal_conductivity',
                            block='pipe')
-    
+
         self.add_material("copper_thermal_conductivity",
                            "PiecewiseLinearInterpolationMaterial",
                            xy_data=[20, 401,
@@ -530,4 +531,3 @@ class MonoblockModel(MooseModel):
 
         # Add postprocessor
         self.add_postprocessor("max_temp","ElementExtremeValue",variable=var_name)
-    
