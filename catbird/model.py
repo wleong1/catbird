@@ -81,7 +81,7 @@ class MooseModel():
         # If the parent is a collection, add there for book-keeping purposes
         # N.B. this is to support subblock syntax
         if isinstance(parent_obj,MooseCollection):
-            parent_obj.add(obj,attr_name)
+            parent_obj.add(obj,obj_name)
 
         # Book-keeping
         if parent_obj == self:
@@ -118,10 +118,22 @@ class MooseModel():
 
         self.add_to_collection("Variables","Variable",variable_name,**collection_kwargs)
 
+    def add_aux_variable(self,variable_name,variable_type="MooseVariable",**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=variable_type
+        collection_kwargs["collection_action"]="AddAuxVariableAction"
+
+        self.add_to_collection("AuxVariables","AuxVariable",variable_name,**collection_kwargs)
+
     def add_kernel(self,kernel_name,kernel_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=kernel_type
         self.add_to_collection("Kernels","Kernel",kernel_name,**collection_kwargs)
+
+    def add_aux_kernel(self,kernel_name,kernel_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=kernel_type
+        self.add_to_collection("AuxKernels","AuxKernel",kernel_name,**collection_kwargs)
 
     def add_bc(self,bc_name,bc_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)

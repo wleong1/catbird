@@ -9,39 +9,51 @@ class AchlysFactory(Factory):
         executioner_enable_dict={
             "obj_type": ["Transient","IterationAdaptiveDT"],
             "system" : ["TimeStepper"],
-            #"collection_type": ["IterationAdaptiveDT"]
-        } 
+        }
         mesh_enable_dict={
             "obj_type": ["FileMesh"]
         }
-        #self.enable_syntax("Executioner")
-        #self.enable_syntax("Executioner/Time")
-        
+        aux_kernel_enable_dict={
+            "collection_type": ["ParsedAux"]
+        }
+        kernel_enable_dict={
+            "collection_type": ["ADTimeDerivative","ADCoupledForce","ADMatDiffusion","ADCoupledTimeDerivative","ADMatReaction"]
+        }
+        material_enable_dict={
+            "collection_type": ["ADParsedMaterial","ADGenericConstantMaterial"]
+        }
+        bcs_enable_dict={
+            "collection_type": ["ADDirichletBC"]
+        }
+        pp_enable_dict={
+            "collection_type": ["ADSideDiffusiveFluxIntegral","ADInterfaceDiffusiveFluxIntegral"]
+        }
+
         self.enable_syntax("Executioner", executioner_enable_dict)
         self.enable_syntax("Mesh", mesh_enable_dict)
-        # self.enable_syntax("Variables")
-        # self.enable_syntax("Kernels")
-        # self.enable_syntax("AuxVariables")
-        # self.enable_syntax("AuxKernels")
-        # self.enable_syntax("Materials")
-        # self.enable_syntax("BCs")
-        # self.enable_syntax("Postprocessors")
-        # self.enable_syntax("Outputs")
+        self.enable_syntax("Variables")
+        self.enable_syntax("AuxVariables")
+        self.enable_syntax("Kernels",kernel_enable_dict)
+        self.enable_syntax("AuxKernels",aux_kernel_enable_dict)
+        self.enable_syntax("Materials",material_enable_dict)
+        self.enable_syntax("BCs", bcs_enable_dict)
+        self.enable_syntax("Postprocessors",pp_enable_dict)
+        self.enable_syntax("Outputs")
 
 # This class represents the boilerplate input deck
 class AchlysModel(MooseModel):
     def load_default_syntax(self):
         self.add_syntax("Mesh", obj_type="FileMesh")
-        # self.add_syntax("AuxVariables")
-        # self.add_syntax("AuxKernels")
-        # self.add_syntax("Variables")
-        # self.add_syntax("Materials")
-        # self.add_syntax("Kernels")
-        # self.add_syntax("BCs")
+        self.add_syntax("AuxVariables")
+        self.add_syntax("AuxKernels")
+        self.add_syntax("Variables")
+        self.add_syntax("Materials")
+        self.add_syntax("Kernels")
+        self.add_syntax("BCs")
         self.add_syntax("Executioner", obj_type="Transient")
         self.add_syntax("Executioner.TimeStepper", obj_type="IterationAdaptiveDT")
-        # self.add_syntax("Postprocessors")
-        # self.add_syntax("Outputs", action="CommonOutputAction")
+        self.add_syntax("Postprocessors")
+        self.add_syntax("Outputs", action="CommonOutputAction")
 
     def __init__(self,factory_in):
         super().__init__(factory_in)
@@ -55,9 +67,9 @@ class AchlysModel(MooseModel):
         # Set executioner attributes
         self.executioner.solve_type='NEWTON'
         self.executioner.petsc_options_iname='-ksp_type -pc_type -pc_factor_mat_solver_package -pc_factor_shift_type'
-        self.executioner.petsc_options_value='bcgs lu superlu_dist NONZERO'        
+        self.executioner.petsc_options_value='bcgs lu superlu_dist NONZERO'
         self.executioner.line_search='l2'
-        self.executioner.scheme='bdf2'        
+        self.executioner.scheme='bdf2'
         self.executioner.automatic_scaling=True
         self.executioner.compute_scaling_once=False
         self.executioner.residual_and_jacobian_together=True
@@ -66,67 +78,156 @@ class AchlysModel(MooseModel):
         self.executioner.end_time=1e5
         self.executioner.dtmin=1e-2
 
-        #print(type(self.executioner.timesteppers))
-        #self.add_to_collection("Executioner.TimeSteppers","TimeStepper",collection_type="IterationAdaptiveDT")
-        
-        # # timestepping options
-        # [TimeStepper]
-        #   type = IterationAdaptiveDT
-        #   optimal_iterations = 12
-        #   cutback_factor = 0.8
-        #   growth_factor = 1.2
-        #   dt = 10 
-        # []
+        # Timestepper attribute
+        self.executioner.timestepper.optimal_iterations=12
+        self.executioner.timestepper.cutback_factor=0.8
+        self.executioner.timestepper.growth_factor=1.2
+        self.executioner.timestepper.dt=10
+
+        # Aux variables
+        aux_variables=["Temperature","H3_source","total_trapped","total_mobile","total_retention"]
+        for var_name in aux_variables:
+            self.add_aux_variable(var_name)
+
+        # Aux var initial conditions
+        self.auxvariables.objects["Temperature"].initial_condition=500
+        self.auxvariables.objects["H3_source"].initial_condition=1e-12
+
+        # Aux kernel
+        self.add_aux_kernel("total_mobile",
+                            "ParsedAux",
+                            variable="total_mobile",
+                            coupled_variables='mobile',
+                            expression='mobile * 6.3222e28')
+
+        self.add_aux_kernel("total_trapped",
+                            "ParsedAux",
+                            variable="total_trapped",
+                            coupled_variables='trapped_1 trapped_2',
+                            expression='(trapped_1 + trapped_2) * 6.3222e28')
+
+        self.add_aux_kernel("total_retention",
+                            "ParsedAux",
+                            variable="total_retention",
+                            coupled_variables='mobile trapped_1 trapped_2',
+                            expression='(mobile + trapped_1 + trapped_2) * 6.3222e28')
+
+        # Add variables
+        variables=["mobile","trapped_1","trapped_2"]
+        for var_name in variables:
+            self.add_variable(var_name)
 
 
-        # # Add variables
-        # var_name="temperature"
-        # self.add_variable(var_name,
-        #                    family="LAGRANGE",
-        #                    order="FIRST",
-        #                    initial_condition=coolantTemp)
+        # Add materials
+        self.add_material("D",
+                          "ADParsedMaterial",
+                          property_name='D',
+                          coupled_variables='Temperature',
+                          constant_names='D0 E kb',
+                          constant_expressions='4.1e-7 0.39 8.6e-5',
+                          expression='D0 * exp(-E / (kb * Temperature))')
 
-        # # Add kernels
-        # self.add_kernel("heat_conduction",kernel_type="HeatConduction", variable=var_name)
+        self.add_material("trapping_factor_W_1",
+                          "ADParsedMaterial",
+                          property_name='trapping_rate_1',
+                          coupled_variables='Temperature',
+                          constant_names='k0 E kb rho',
+                          constant_expressions='8.96e-17 0.39 8.6e-5 6.3222e28',
+                          expression = 'k0 * rho * exp(-E / (kb * Temperature))')
 
+        self.add_material("trapping_factor_W_2",
+                          "ADParsedMaterial",
+                          property_name='trapping_rate_2',
+                          coupled_variables='Temperature',
+                          constant_names='k0 E kb rho',
+                          constant_expressions='8.96e-17 0.39 8.6e-5 6.3222e28',
+                          expression='k0 * rho * exp(-E / (kb * Temperature))')
 
-        # # Add materials
-        # # Thermal conductivities
-        # self.add_material("cucrzr_thermal_conductivity",
-        #                    "PiecewiseLinearInterpolationMaterial",
-        #                    xy_data=[20,  318,
-        #                             50,  324,
-        #                             100, 333,
-        #                             150, 339,
-        #                             200, 343,
-        #                             250, 345,
-        #                             300, 346,
-        #                             350, 347,
-        #                             400, 347,
-        #                             450, 346,
-        #                             500, 346],
-        #                    variable=var_name,
-        #                    property='thermal_conductivity',
-        #                    block='pipe')
+        self.add_material("detrapping_factor_W_1",
+                          "ADParsedMaterial",
+                          property_name='detrapping_rate_1',
+                          coupled_variables='Temperature',
+                          constant_names = 'p0 E kb',
+                          constant_expressions = '1e13 0.87 8.6e-5',
+                          expression='-p0 * exp(-E / (kb * Temperature))')
 
- 
-        # # Add boundary conditions
-        # surfHeatFlux=10e6   # W/m^2
-        # self.add_bc("heat_flux_in",
-        #              "NeumannBC",
-        #              variable=var_name,
-        #              boundary='top',
-        #              value=surfHeatFlux)
+        self.add_material("detrapping_factor_W_2",
+                          "ADParsedMaterial",
+                          property_name='detrapping_rate_2',
+                          coupled_variables='Temperature',
+                          constant_names='p0 E kb',
+                          constant_expressions='1e13 1.0 8.6e-5',
+                          expression='-p0 * exp(-E / (kb * Temperature))')
 
-        # self.add_bc("heat_flux_out",
-        #              "ConvectiveHeatFluxBC",
-        #              variable=var_name,
-        #              boundary='internal_boundary',
-        #              T_infinity=coolantTemp,
-        #              heat_transfer_coefficient='heat_transfer_coefficient')
+        self.add_material("trap_density_W_1",
+                          "ADParsedMaterial",
+                          property_name='trap_density_1',
+                          constant_names='n',
+                          constant_expressions='1.3e-3',
+                          expression='n')
 
-        # # Add Exodus output
-        # self.outputs.exodus=True
+        self.add_material("trap_density_W_2",
+                          "ADParsedMaterial",
+                          property_name='trap_density_2',
+                          constant_names='n',
+                          constant_expressions='4e-4',
+                          expression='n')
 
-        # # Add postprocessor
-        # self.add_postprocessor("max_temp","ElementExtremeValue",variable=var_name)
+        self.add_material("atomic_density_W",
+                          "ADGenericConstantMaterial",
+                          prop_names='rho',
+                          prop_values='6.3222e28')
+
+        self.add_material("trap_1_reaction",
+                          "ADParsedMaterial",
+                          coupled_variables='trapped_1',
+                          property_name='trap_1_reaction',
+                          material_property_names='trapping_rate_1 trap_density_1',
+                          expression='trapping_rate_1 * (trap_density_1 - trapped_1)')
+
+        self.add_material("trap_2_reaction",
+                          "ADParsedMaterial",
+                          property_name='trap_2_reaction',
+                          coupled_variables='trapped_2',
+                          material_property_names='trapping_rate_2 trap_density_2',
+                          expression='trapping_rate_2 * (trap_density_2 - trapped_2)')
+
+        # Add kernels
+        self.add_kernel("time_derivative_mobile","ADTimeDerivative",variable="mobile")
+        self.add_kernel("source_term","ADCoupledForce",variable="mobile",v="H3_source")
+        self.add_kernel("diffusion","ADMatDiffusion",variable="mobile",diffusivity="D")
+        self.add_kernel("coupled_time_derivative_trap_1","ADCoupledTimeDerivative",variable="mobile",v="trapped_1")
+        self.add_kernel("coupled_time_derivative_trap_2","ADCoupledTimeDerivative",variable="mobile",v="trapped_2")
+
+        self.add_kernel("time_derivative_trap_1","ADTimeDerivative",variable="trapped_1")
+        self.add_kernel("trapping_1","ADMatReaction",variable="trapped_1",v="mobile",reaction_rate="trap_1_reaction")
+        self.add_kernel("detrapping_1","ADMatReaction",variable="trapped_1",reaction_rate="detrapping_rate_1")
+
+        self.add_kernel("time_derivative_trap_2","ADTimeDerivative",variable="trapped_2")
+        self.add_kernel("trapping_2","ADMatReaction",variable="trapped_2",v="mobile",reaction_rate="trap_2_reaction")
+        self.add_kernel("detrapping_2","ADMatReaction",variable="trapped_2",reaction_rate="detrapping_rate_2")
+
+        # Add boundary conditions
+        self.add_bc("outflow",
+                    "ADDirichletBC",
+                    variable="mobile",
+                    boundary='Steel_Helium Steel_air Beryllium_air SteelMaybe_air Tungsten_air',
+                    value=0)
+
+        # Add postprocessors
+        self.add_postprocessor("cooling_surface_flux",
+                               "ADSideDiffusiveFluxIntegral",
+                               variable="total_mobile",
+                               diffusivity="D",
+                               boundary="Steel_Helium Steel_air Beryllium_air SteelMaybe_air Tungsten_air")
+
+        self.add_postprocessor("interface_flux_W_Cu",
+                               "ADInterfaceDiffusiveFluxIntegral",
+                               variable="total_mobile",
+                               diffusivity="D",
+                               boundary="Beryllium_Tungsten")
+
+        # Turn on outputs
+        self.outputs.console=True
+        self.outputs.exodus=True
+        self.outputs.csv=True
