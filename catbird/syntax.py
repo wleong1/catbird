@@ -456,6 +456,48 @@ def parse_block(json_obj,syntax_path,class_name):
     # Return our new class
     return new_cls
 
+def make_moose_param(param_name, param_info):
+    attr_types = tuple(type_mapping[t] for t in param_info['basic_type'].split(':'))
+    attr_type = attr_types[-1]
+
+    is_array=False
+    if len(attr_types) > 1:
+        for t in attr_types[:-1]:
+            assert issubclass(t, Iterable)
+        is_array=True
+
+    # Set allowed values if present
+    allowed_values = None
+    if param_info['options']:
+        values = param_info['options'].split()
+        allowed_values = [_convert_to_type(attr_type, v) for v in values]
+
+    # Apply the default value if provided
+    # TODO: default values need to be handled differently. They are replacing
+    # properties in the type definition as they are now
+    default = None
+    if 'default' in param_info.keys() and param_info['default'] != None and param_info['default'] != '':
+        if is_array:
+            defaults = param_info['default']
+            if type(defaults) == str:
+                default = [_convert_to_type(attr_type, v) for v in defaults.split()]
+            elif issubclass(type(defaults), Iterable):
+                default = [_convert_to_type(attr_type, v) for v in defaults]
+            else:
+                default = [defaults]
+        else:
+            default = _convert_to_type(attr_type, param_info['default'])
+
+    # Create and add a MOOSE parameter
+    moose_param=MooseParam(param_name,
+                           attr_type,
+                           is_array,
+                           default=default,
+                           allowed_vals=allowed_values,
+                           description=param_info.get('description'))
+
+    return moose_param
+
 def get_params_list(json_obj,syntax_path):
     # Available syntax for this block as dict
     block=fetch_syntax(json_obj,syntax_path)
@@ -465,45 +507,16 @@ def get_params_list(json_obj,syntax_path):
     moose_param_list=[]
 
     for param_name, param_info in params.items():
-        attr_types = tuple(type_mapping[t] for t in param_info['basic_type'].split(':'))
-        attr_type = attr_types[-1]
-
-        is_array=False
-        if len(attr_types) > 1:
-            for t in attr_types[:-1]:
-                assert issubclass(t, Iterable)
-            is_array=True
-
-        # Set allowed values if present
-        allowed_values = None
-        if param_info['options']:
-            values = param_info['options'].split()
-            allowed_values = [_convert_to_type(attr_type, v) for v in values]
-
-        # Apply the default value if provided
-        # TODO: default values need to be handled differently. They are replacing
-        # properties in the type definition as they are now
-        default = None
-        if 'default' in param_info.keys() and param_info['default'] != None and param_info['default'] != '':
-            if is_array:
-                defaults = param_info['default']
-                if type(defaults) == str:
-                    default = [_convert_to_type(attr_type, v) for v in defaults.split()]
-                elif issubclass(type(defaults), Iterable):
-                    default = [_convert_to_type(attr_type, v) for v in defaults]
-                else:
-                    default = [defaults]
-            else:
-                default = _convert_to_type(attr_type, param_info['default'])
-
-        # Create and add a MOOSE parameter
-        moose_param=MooseParam(param_name,
-                               attr_type,
-                               is_array,
-                               default=default,
-                               allowed_vals=allowed_values,
-                               description=param_info.get('description'),
-        )
+        try :
+            # Lift moose parameter information form dictionary and store as obj
+            moose_param = make_moose_param(param_name, param_info)
+        except ValueError:
+            # This can happen when inconsistencies arise between MOOSE-deduced types
+            # and default values. This means there is a bug to fix on the MOOSE end.
+            # We shall just warn and skip this parameter.
+            warning="Warning: Type inconsistency detected for attribute {}. Skipping.".format(param_name)
+            print(warning)
+            continue
 
         moose_param_list.append(moose_param)
 
