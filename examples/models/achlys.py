@@ -30,6 +30,7 @@ class AchlysFactory(Factory):
         }
 
         self.enable_syntax("Executioner", executioner_enable_dict)
+        self.enable_syntax("Problem")
         self.enable_syntax("Mesh", mesh_enable_dict)
         self.enable_syntax("Variables")
         self.enable_syntax("AuxVariables")
@@ -74,6 +75,7 @@ class AchlysModel(MooseModel):
         self.add_syntax("BCs")
         self.add_syntax("Executioner", obj_type="Transient")
         self.add_syntax("Executioner.TimeStepper", obj_type="IterationAdaptiveDT")
+        self.add_syntax("Problem", obj_type="FEProblem")
         self.add_syntax("Postprocessors")
         self.add_syntax("Outputs", action="CommonOutputAction")
 
@@ -188,6 +190,10 @@ class AchlysModel(MooseModel):
         # Set mesh attributes
         self.mesh.file='breeder_unit.e'
 
+        # Tell MOOSE we have blocks where we don't want to solve
+        self.problem.kernel_coverage_check=False
+        self.problem.material_coverage_check=False
+
         # Set executioner attributes
         self.executioner.solve_type='NEWTON'
         self.executioner.petsc_options_iname='-ksp_type -pc_type -pc_factor_mat_solver_package -pc_factor_shift_type'
@@ -247,6 +253,7 @@ class AchlysModel(MooseModel):
         breeder = AchlysMaterial("breeder", "KALOS")
         materials=[multiplier, steel, breeder]
         self._add_achlys_materials(materials)
+        
         #purge_gas = AchlysMaterial("purge_gas", "h_he")
         #coolant = AchlysMaterial("coolant","helium")
 
