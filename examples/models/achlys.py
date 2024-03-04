@@ -17,7 +17,7 @@ class AchlysFactory(Factory):
             "collection_type": ["ParsedAux"]
         }
         kernel_enable_dict={
-            "collection_type": ["ADTimeDerivative","ADCoupledForce","ADMatDiffusion","ADCoupledTimeDerivative","ADMatReaction"]
+            "collection_type": ["ADTimeDerivative","ADCoupledForce","ADMatDiffusion","ADCoupledTimeDerivative","ADMatReaction", "NullKernel"]
         }
         material_enable_dict={
             "collection_type": ["ADParsedMaterial","ADGenericConstantMaterial"]
@@ -190,9 +190,9 @@ class AchlysModel(MooseModel):
         # Set mesh attributes
         self.mesh.file='breeder_unit.e'
 
-        # Tell MOOSE we have blocks where we don't want to solve
-        self.problem.kernel_coverage_check=False
-        self.problem.material_coverage_check=False
+        ## Tell MOOSE we have blocks where we don't want to solve
+        #self.problem.kernel_coverage_check=False
+        #self.problem.material_coverage_check=False
 
         # Set executioner attributes
         self.executioner.solve_type='NEWTON'
@@ -251,7 +251,8 @@ class AchlysModel(MooseModel):
         multiplier= AchlysMaterial("multiplier", "Beryllium")
         steel = AchlysMaterial("steel","EUROFER Perf_Steel")
         breeder = AchlysMaterial("breeder", "KALOS")
-        materials=[multiplier, steel, breeder]
+        fluid = AchlysMaterial("fluid", "Helium H_He")
+        materials=[multiplier, steel, breeder, fluid]
         self._add_achlys_materials(materials)
         
         #purge_gas = AchlysMaterial("purge_gas", "h_he")
@@ -272,6 +273,12 @@ class AchlysModel(MooseModel):
         self.add_kernel("time_derivative_trap_2","ADTimeDerivative",variable="trapped_2",block=block_str)
         self.add_kernel("trapping_2","ADMatReaction",variable="trapped_2",v="mobile",reaction_rate="trap_2_reaction",block=block_str)
         self.add_kernel("detrapping_2","ADMatReaction",variable="trapped_2",reaction_rate="detrapping_rate_2",block=block_str)
+
+
+        # Don't solve on fluid
+        inactive_blocks=["H_He", "Helium"]
+        inactive_str=" ".join(inactive_blocks)
+        self.add_kernel("null","NullKernel",variable="mobile",block=inactive_str)        
 
         # Add boundary conditions
         boundary_list=["Beryllium_air", "EUROFER_air", "EUROFER_H_He", "EUROFER_Helium", "Perf_Steel_H_He"]
