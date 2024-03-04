@@ -91,15 +91,25 @@ class MooseBase(ABC,MooseString):
         param=self.get_param(attr_name)
         default_val = param.default
         if default_val is None:
-
             default_val = param.attr_type()
 
         # Compare and return
         return attr_val == default_val
 
+    def always_print(self,attr_name):
+        # Apparent error if we don't explicitly print in this circumstance
+        param=self.get_param(attr_name)
+        return param.required and param.controllable
+
     def attr_to_str(self,attr_name,print_default=False):
         attr_str=""
-        if self.is_default(attr_name) and not print_default:
+
+        # Decide whether to print this attribute or not
+        print_attr=False
+        if print_default or not self.is_default(attr_name) or self.always_print(attr_name):
+            print_attr=True
+
+        if not print_attr:
             return attr_str
 
         attr_val=getattr(self, attr_name)

@@ -40,6 +40,28 @@ class AchlysFactory(Factory):
         self.enable_syntax("Postprocessors",pp_enable_dict)
         self.enable_syntax("Outputs")
 
+# Data structure for material property values
+class AchlysMaterial():
+    def __init__(self,name_in, block_str_in):
+        self.name=name_in
+        self.block_str=block_str_in
+
+        self.rho=6.3222e28
+        self.D0=4.1e-7
+        self.k0_1=8.96e-17
+        self.k0_2=8.96e-17
+
+        self.p0_1=1e13
+        self.p0_2=1e13
+        self.E_d=0.39
+        self.E_t_1=0.39
+        self.E_t_2=0.39
+        self.E_p_1=0.87
+        self.E_p_2=1.0
+        self.n_1=1.3e-3
+        self.n_2=4e-4
+
+
 # This class represents the boilerplate input deck
 class AchlysModel(MooseModel):
     def load_default_syntax(self):
@@ -59,6 +81,101 @@ class AchlysModel(MooseModel):
         super().__init__(factory_in)
         assert isinstance(factory_in,AchlysFactory)
         self._concretise_model()
+
+
+    def _add_achlys_materials(self,mats):
+        for mat in mats:
+            self._add_achlys_material(mat)
+
+        # Global properties
+        self.add_material("trap_1_reaction",
+                          "ADParsedMaterial",
+                          coupled_variables='trapped_1',
+                          property_name='trap_1_reaction',
+                          material_property_names='trapping_rate_1 trap_density_1',
+                          expression='trapping_rate_1 * (trap_density_1 - trapped_1)')
+
+        self.add_material("trap_2_reaction",
+                          "ADParsedMaterial",
+                          property_name='trap_2_reaction',
+                          coupled_variables='trapped_2',
+                          material_property_names='trapping_rate_2 trap_density_2',
+                          expression='trapping_rate_2 * (trap_density_2 - trapped_2)')
+
+    def _add_achlys_material(self,mat):
+        assert isinstance(mat,AchlysMaterial)
+
+        # Global constant
+        k_b=8.6e-5
+
+        # Add materials
+        self.add_material("D_{}".format(mat.name),
+                         "ADParsedMaterial",
+                         property_name='D',
+                         coupled_variables='Temperature',
+                         constant_names='D0 E_d kb',
+                         constant_expressions='{} {} {}'.format(mat.D0,mat.E_d,k_b),
+                         expression='D0 * exp(-E_d / (kb * Temperature))',
+                         block=mat.block_str)
+
+        self.add_material("trapping_factor_{}_1".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='trapping_rate_1',
+                          coupled_variables='Temperature',
+                          constant_names='k0_1 E_t_1 kb rho',
+                          constant_expressions='{} {} {} {}'.format(mat.k0_1,mat.E_t_1,k_b,mat.rho),
+                          expression='k0_1 * rho * exp(-E_t_1 / (kb * Temperature))',
+                          block=mat.block_str)
+
+        self.add_material("trapping_factor_{}_2".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='trapping_rate_2',
+                          coupled_variables='Temperature',
+                          constant_names = 'k0_2 E_t_2 kb rho',
+                          constant_expressions = '{} {}  {} {}'.format(mat.k0_2,mat.E_t_2,k_b,mat.rho),
+                          expression = 'k0_2 * rho * exp(-E_t_2 / (kb * Temperature))',
+                          block=mat.block_str)
+
+        self.add_material("detrapping_factor_{}_1".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='detrapping_rate_1',
+                          coupled_variables='Temperature',
+                          constant_names='p0_1 E_p_1 kb',
+                          constant_expressions='{} {} {}'.format(mat.p0_1, mat.E_p_1,k_b),
+                          expression='-p0_1 * exp(-E_p_1 / (kb * Temperature))',
+                          block=mat.block_str)
+
+        self.add_material("detrapping_factor_{}_2".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='detrapping_rate_2',
+                          coupled_variables='Temperature',
+                          constant_names='p0_2 E_p_2 kb',
+                          constant_expressions='{} {} {}'.format(mat.p0_2, mat.E_p_2,k_b),
+                          expression='-p0_2 * exp(-E_p_2 / (kb * Temperature))',
+                          block=mat.block_str)
+
+        self.add_material("trap_density_{}_1".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='trap_density_1',
+                          constant_names='n_1',
+                          constant_expressions='{}'.format(mat.n_1),
+                          expression='n_1',
+                          block=mat.block_str)
+
+        self.add_material("trap_density_{}_2".format(mat.name),
+                          "ADParsedMaterial",
+                          property_name='trap_density_2',
+                          constant_names='n_2',
+                          constant_expressions='{}'.format(mat.n_2),
+                          expression='n_2',
+                          block=mat.block_str)
+
+        self.add_material("atomic_density_{}".format(mat.name),
+                          "ADGenericConstantMaterial",
+                          prop_names='rho',
+                          prop_values='{}'.format(mat.rho),
+                          block=mat.block_str)
+
 
     def _concretise_model(self):
         # Set mesh attributes
@@ -117,80 +234,10 @@ class AchlysModel(MooseModel):
         for var_name in variables:
             self.add_variable(var_name)
 
-
         # Add materials
-        self.add_material("D",
-                          "ADParsedMaterial",
-                          property_name='D',
-                          coupled_variables='Temperature',
-                          constant_names='D0 E kb',
-                          constant_expressions='4.1e-7 0.39 8.6e-5',
-                          expression='D0 * exp(-E / (kb * Temperature))')
-
-        self.add_material("trapping_factor_W_1",
-                          "ADParsedMaterial",
-                          property_name='trapping_rate_1',
-                          coupled_variables='Temperature',
-                          constant_names='k0 E kb rho',
-                          constant_expressions='8.96e-17 0.39 8.6e-5 6.3222e28',
-                          expression = 'k0 * rho * exp(-E / (kb * Temperature))')
-
-        self.add_material("trapping_factor_W_2",
-                          "ADParsedMaterial",
-                          property_name='trapping_rate_2',
-                          coupled_variables='Temperature',
-                          constant_names='k0 E kb rho',
-                          constant_expressions='8.96e-17 0.39 8.6e-5 6.3222e28',
-                          expression='k0 * rho * exp(-E / (kb * Temperature))')
-
-        self.add_material("detrapping_factor_W_1",
-                          "ADParsedMaterial",
-                          property_name='detrapping_rate_1',
-                          coupled_variables='Temperature',
-                          constant_names = 'p0 E kb',
-                          constant_expressions = '1e13 0.87 8.6e-5',
-                          expression='-p0 * exp(-E / (kb * Temperature))')
-
-        self.add_material("detrapping_factor_W_2",
-                          "ADParsedMaterial",
-                          property_name='detrapping_rate_2',
-                          coupled_variables='Temperature',
-                          constant_names='p0 E kb',
-                          constant_expressions='1e13 1.0 8.6e-5',
-                          expression='-p0 * exp(-E / (kb * Temperature))')
-
-        self.add_material("trap_density_W_1",
-                          "ADParsedMaterial",
-                          property_name='trap_density_1',
-                          constant_names='n',
-                          constant_expressions='1.3e-3',
-                          expression='n')
-
-        self.add_material("trap_density_W_2",
-                          "ADParsedMaterial",
-                          property_name='trap_density_2',
-                          constant_names='n',
-                          constant_expressions='4e-4',
-                          expression='n')
-
-        self.add_material("atomic_density_W",
-                          "ADGenericConstantMaterial",
-                          prop_names='rho',
-                          prop_values='6.3222e28')
-
-        self.add_material("trap_1_reaction",
-                          "ADParsedMaterial",
-                          coupled_variables='trapped_1',
-                          property_name='trap_1_reaction',
-                          material_property_names='trapping_rate_1 trap_density_1',
-                          expression='trapping_rate_1 * (trap_density_1 - trapped_1)')
-
-        self.add_material("trap_2_reaction",
-                          "ADParsedMaterial",
-                          property_name='trap_2_reaction',
-                          coupled_variables='trapped_2',
-                          material_property_names='trapping_rate_2 trap_density_2',
-                          expression='trapping_rate_2 * (trap_density_2 - trapped_2)')
+        tungsten=AchlysMaterial("tungsten","W")
+        materials=[tungsten,]
+        self._add_achlys_materials(materials)
 
         # Add kernels
         self.add_kernel("time_derivative_mobile","ADTimeDerivative",variable="mobile")

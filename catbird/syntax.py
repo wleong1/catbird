@@ -488,12 +488,22 @@ def make_moose_param(param_name, param_info):
         else:
             default = _convert_to_type(attr_type, param_info['default'])
 
+    is_required=False
+    if 'required' in param_info.keys():
+        is_required=param_info['required']
+
+    is_controllable=False
+    if 'controllable' in param_info.keys():
+        is_controllable=param_info['controllable']
+
     # Create and add a MOOSE parameter
     moose_param=MooseParam(param_name,
                            attr_type,
                            is_array,
                            default=default,
                            allowed_vals=allowed_values,
+                           required=is_required,
+                           controllable=is_controllable,
                            description=param_info.get('description'))
 
     return moose_param
