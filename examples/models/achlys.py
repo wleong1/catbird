@@ -84,8 +84,13 @@ class AchlysModel(MooseModel):
 
 
     def _add_achlys_materials(self,mats):
+        self.active_blocks=[]
         for mat in mats:
             self._add_achlys_material(mat)
+            self.active_blocks.append(mat.block_str)
+
+        block_str=" ".join(self.active_blocks)
+
 
         # Global properties
         self.add_material("trap_1_reaction",
@@ -93,14 +98,16 @@ class AchlysModel(MooseModel):
                           coupled_variables='trapped_1',
                           property_name='trap_1_reaction',
                           material_property_names='trapping_rate_1 trap_density_1',
-                          expression='trapping_rate_1 * (trap_density_1 - trapped_1)')
+                          expression='trapping_rate_1 * (trap_density_1 - trapped_1)',
+                          block=block_str)
 
         self.add_material("trap_2_reaction",
                           "ADParsedMaterial",
                           property_name='trap_2_reaction',
                           coupled_variables='trapped_2',
                           material_property_names='trapping_rate_2 trap_density_2',
-                          expression='trapping_rate_2 * (trap_density_2 - trapped_2)')
+                          expression='trapping_rate_2 * (trap_density_2 - trapped_2)',
+                          block=block_str)
 
     def _add_achlys_material(self,mat):
         assert isinstance(mat,AchlysMaterial)
@@ -179,7 +186,7 @@ class AchlysModel(MooseModel):
 
     def _concretise_model(self):
         # Set mesh attributes
-        self.mesh.file='mesh.e'
+        self.mesh.file='breeder_unit.e'
 
         # Set executioner attributes
         self.executioner.solve_type='NEWTON'
@@ -234,45 +241,47 @@ class AchlysModel(MooseModel):
         for var_name in variables:
             self.add_variable(var_name)
 
-        # Add materials
-        tungsten=AchlysMaterial("tungsten","W")
-        materials=[tungsten,]
+        # Add materials - TODO: add params
+        multiplier= AchlysMaterial("multiplier", "Beryllium")
+        steel = AchlysMaterial("steel","EUROFER Perf_Steel")
+        breeder = AchlysMaterial("breeder", "KALOS")
+        materials=[multiplier, steel, breeder]
         self._add_achlys_materials(materials)
+        #purge_gas = AchlysMaterial("purge_gas", "h_he")
+        #coolant = AchlysMaterial("coolant","helium")
 
         # Add kernels
-        self.add_kernel("time_derivative_mobile","ADTimeDerivative",variable="mobile")
-        self.add_kernel("source_term","ADCoupledForce",variable="mobile",v="H3_source")
-        self.add_kernel("diffusion","ADMatDiffusion",variable="mobile",diffusivity="D")
-        self.add_kernel("coupled_time_derivative_trap_1","ADCoupledTimeDerivative",variable="mobile",v="trapped_1")
-        self.add_kernel("coupled_time_derivative_trap_2","ADCoupledTimeDerivative",variable="mobile",v="trapped_2")
+        block_str=" ".join(self.active_blocks)
+        self.add_kernel("time_derivative_mobile","ADTimeDerivative",variable="mobile",block=block_str)
+        self.add_kernel("source_term","ADCoupledForce",variable="mobile",v="H3_source",block=block_str)
+        self.add_kernel("diffusion","ADMatDiffusion",variable="mobile",diffusivity="D",block=block_str)
+        self.add_kernel("coupled_time_derivative_trap_1","ADCoupledTimeDerivative",variable="mobile",v="trapped_1",block=block_str)
+        self.add_kernel("coupled_time_derivative_trap_2","ADCoupledTimeDerivative",variable="mobile",v="trapped_2",block=block_str)
 
-        self.add_kernel("time_derivative_trap_1","ADTimeDerivative",variable="trapped_1")
-        self.add_kernel("trapping_1","ADMatReaction",variable="trapped_1",v="mobile",reaction_rate="trap_1_reaction")
-        self.add_kernel("detrapping_1","ADMatReaction",variable="trapped_1",reaction_rate="detrapping_rate_1")
+        self.add_kernel("time_derivative_trap_1","ADTimeDerivative",variable="trapped_1",block=block_str)
+        self.add_kernel("trapping_1","ADMatReaction",variable="trapped_1",v="mobile",reaction_rate="trap_1_reaction",block=block_str)
+        self.add_kernel("detrapping_1","ADMatReaction",variable="trapped_1",reaction_rate="detrapping_rate_1",block=block_str)
 
-        self.add_kernel("time_derivative_trap_2","ADTimeDerivative",variable="trapped_2")
-        self.add_kernel("trapping_2","ADMatReaction",variable="trapped_2",v="mobile",reaction_rate="trap_2_reaction")
-        self.add_kernel("detrapping_2","ADMatReaction",variable="trapped_2",reaction_rate="detrapping_rate_2")
+        self.add_kernel("time_derivative_trap_2","ADTimeDerivative",variable="trapped_2",block=block_str)
+        self.add_kernel("trapping_2","ADMatReaction",variable="trapped_2",v="mobile",reaction_rate="trap_2_reaction",block=block_str)
+        self.add_kernel("detrapping_2","ADMatReaction",variable="trapped_2",reaction_rate="detrapping_rate_2",block=block_str)
 
         # Add boundary conditions
+        boundary_list=["Beryllium_air", "EUROFER_air", "EUROFER_H_He", "EUROFER_Helium", "Perf_Steel_H_He"]
+        boundary_str=" ".join(boundary_list)
         self.add_bc("outflow",
                     "ADDirichletBC",
                     variable="mobile",
-                    boundary='Steel_Helium Steel_air Beryllium_air SteelMaybe_air Tungsten_air',
+                    boundary=boundary_str,
                     value=0)
 
         # Add postprocessors
-        self.add_postprocessor("cooling_surface_flux",
+
+        self.add_postprocessor("tritium_extraction",
                                "ADSideDiffusiveFluxIntegral",
                                variable="total_mobile",
                                diffusivity="D",
-                               boundary="Steel_Helium Steel_air Beryllium_air SteelMaybe_air Tungsten_air")
-
-        self.add_postprocessor("interface_flux_W_Cu",
-                               "ADInterfaceDiffusiveFluxIntegral",
-                               variable="total_mobile",
-                               diffusivity="D",
-                               boundary="Beryllium_Tungsten")
+                               boundary="Perf_Steel_H_He")
 
         # Turn on outputs
         self.outputs.console=True
