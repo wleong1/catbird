@@ -25,6 +25,9 @@ class AchlysFactory(Factory):
         bcs_enable_dict={
             "collection_type": ["ADDirichletBC"]
         }
+        ics_enable_dict={
+            "collection_type": ["ConstantIC"]
+        }
         pp_enable_dict={
             "collection_type": ["ADSideDiffusiveFluxIntegral","ADInterfaceDiffusiveFluxIntegral"]
         }
@@ -38,6 +41,7 @@ class AchlysFactory(Factory):
         self.enable_syntax("AuxKernels",aux_kernel_enable_dict)
         self.enable_syntax("Materials",material_enable_dict)
         self.enable_syntax("BCs", bcs_enable_dict)
+        self.enable_syntax("ICs", ics_enable_dict)
         self.enable_syntax("Postprocessors",pp_enable_dict)
         self.enable_syntax("Outputs")
 
@@ -72,6 +76,7 @@ class AchlysModel(MooseModel):
         self.add_syntax("Variables")
         self.add_syntax("Materials")
         self.add_syntax("Kernels")
+        self.add_syntax("ICs")
         self.add_syntax("BCs")
         self.add_syntax("Executioner", obj_type="Transient")
         self.add_syntax("Executioner.TimeStepper", obj_type="IterationAdaptiveDT")
@@ -221,7 +226,12 @@ class AchlysModel(MooseModel):
 
         # Aux var initial conditions
         self.auxvariables.objects["Temperature"].initial_condition=500
-        self.auxvariables.objects["H3_source"].initial_condition=1e-12
+
+        self.add_ic("h3_source_ic",
+                    "ConstantIC",
+                    variable="H3_source",
+                    block='KALOS',
+                    value=1e-9)
 
         # Aux kernel
         self.add_aux_kernel("total_mobile",
@@ -254,7 +264,7 @@ class AchlysModel(MooseModel):
         fluid = AchlysMaterial("fluid", "Helium H_He")
         materials=[multiplier, steel, breeder, fluid]
         self._add_achlys_materials(materials)
-        
+
         #purge_gas = AchlysMaterial("purge_gas", "h_he")
         #coolant = AchlysMaterial("coolant","helium")
 
@@ -278,7 +288,7 @@ class AchlysModel(MooseModel):
         # Don't solve on fluid
         inactive_blocks=["H_He", "Helium"]
         inactive_str=" ".join(inactive_blocks)
-        self.add_kernel("null","NullKernel",variable="mobile",block=inactive_str)        
+        self.add_kernel("null","NullKernel",variable="mobile",block=inactive_str)
 
         # Add boundary conditions
         boundary_list=["Beryllium_air", "EUROFER_air", "EUROFER_H_He", "EUROFER_Helium", "Perf_Steel_H_He"]
@@ -290,7 +300,6 @@ class AchlysModel(MooseModel):
                     value=0)
 
         # Add postprocessors
-
         self.add_postprocessor("tritium_extraction",
                                "ADSideDiffusiveFluxIntegral",
                                variable="total_mobile",

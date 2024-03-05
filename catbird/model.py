@@ -140,6 +140,11 @@ class MooseModel():
         collection_kwargs["collection_type"]=bc_type
         self.add_to_collection("BCs","BC", bc_name,**collection_kwargs)
 
+    def add_ic(self,ic_name,ic_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=ic_type
+        self.add_to_collection("ICs","IC", ic_name,**collection_kwargs)
+
     def add_material(self,mat_name,mat_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=mat_type
