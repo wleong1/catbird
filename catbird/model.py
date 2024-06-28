@@ -155,6 +155,11 @@ class MooseModel():
         collection_kwargs["collection_type"]=output_type
         self.add_to_collection("Outputs","Output",output_name,**collection_kwargs)
 
+    def add_user_object(self,user_object_name,user_object_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=user_object_type
+        self.add_to_collection("UserObjects","UserObject",user_object_name,**collection_kwargs)
+
     def add_function(self,function_name,function_type,**kwargs_in):
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=function_type
@@ -174,6 +179,16 @@ class MooseModel():
         collection_kwargs=deepcopy(kwargs_in)
         collection_kwargs["collection_type"]=mesh_generator_type
         self.add_to_collection("Mesh","MeshGenerator",mesh_generator_name,**collection_kwargs)
+
+    def add_multi_app(self,multi_app_name,multi_app_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=multi_app_type
+        self.add_to_collection("MultiApps","MultiApp",multi_app_name,**collection_kwargs)
+
+    def add_transfer(self,transfer_name,transfer_type,**kwargs_in):
+        collection_kwargs=deepcopy(kwargs_in)
+        collection_kwargs["collection_type"]=transfer_type
+        self.add_to_collection("Transfers","Transfer",transfer_name,**collection_kwargs)
 
     def to_str(self,print_default=False):
         model_str=""
