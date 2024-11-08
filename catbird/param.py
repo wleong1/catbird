@@ -9,7 +9,7 @@ class MooseParam():
         self.attr_type=attr_type
         self.allowed_vals=allowed_vals
         self.is_array=is_array
-        self.cpp_type = cpp_type
+        self.cpp_type = type
 
         # Set name
         if not isinstance(attr_name, str):
