@@ -31,7 +31,7 @@ class MooseParam():
         # Set docstring
         doc_str = '\n'
         doc_str += attr_name+' : '
-        doc_str += f'{attr_type.__name__}\n'
+        doc_str += f'{cpp_type}\n'
         if description is not None and description != "":
             self.description = description
             doc_str += "  "
